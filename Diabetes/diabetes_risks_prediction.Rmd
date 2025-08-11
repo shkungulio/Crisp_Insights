@@ -1,0 +1,68 @@
+---
+title: "Diabetes Risk Predictions"
+author: "Seif Kungulio"
+output:
+  html_document:
+    theme: readable
+    toc: true
+    toc_depth: 3
+    toc_float:
+      collapsed: true
+      smooth_scroll: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+
+
+```
+<hr style="height:5px; border:none; color:#FF0000; background-color:#FF0000;" />
+
+## Business Understanding
+<hr style="height:2px; border:none; color:#006000; background-color:#006000;" />
+
+### Data Collection
+The primary dataset used is the **Diabetes Health Indicators Dataset** sourced from **Kaggle**, based on the **2015 Behavioral Risk Factor Surveillance System (BRFSS)**. This dataset includes over **253,000 observations** and **22 attributes**, offering a rich foundation for predictive modeling using demographic, behavioral, and clinical health indicators.
+
+### Data Description
+The dataset contains 253,680 records and 22 variables relevant to diabetes risk prediction. The target variable is binary (Diabetes_binary), while the predictors include behavioral, clinical, and demographic factors such as blood pressure, cholesterol, BMI, physical activity, general health, and income. Most variables (17) are binary categorical, with the remaining 5 being numeric or ordinal. This structure supports classification modeling and offers strong coverage of key health indicators needed to identify individuals at risk for diabetes.
+
+### Load the data
+```{r}
+diabetes.df <- read.csv("diabetes_health_indicators_BRFSS2015.csv")
+```
+### Check for dimension and structure
+```{r}
+dim(diabetes.df)
+str(diabetes.df)
+```
+### Check for statistical summary
+```{r}
+summary(diabetes.df)
+```
+
+### Business Objective
+The primary business objective of this project is to support the **Texas Department of State Health Services** in enhancing diabetes prevention efforts across the state. By leveraging self-reported health behavior and demographic data, the goal is to develop a predictive model by **2026** that identifies **Texas adults with a 30% or higher risk** of developing diabetes within the next five years. This model aims to facilitate **early detection**, reduce **long-term healthcare costs**, promote **health equity**, and **optimize resource allocation** in vulnerable communities.
+
+### Problem Statement
+How can public health agencies in Texas use self-reported behavioral and demographic data to **identify adults at 30%+ risk of developing diabetes within 5 years**, using markers like **HbA1c (>5.7%)** and **BMI (>30)**, and implement targeted interventions by **2026**?.
+
+### Business Success Criteria
+The project will be considered successful if it:
+
+- Produces a validated predictive model with practical thresholds for decision-making
+- Demonstrates improved identification of high-risk populations compared to current screening protocols
+- Supports targeted outreach that aligns with state health equity goals
+- Provides actionable insights for stakeholders through dashboards or visual summaries
+
+<br>
+
+
+## Data Understanding
+<hr style="height:2px; border:none; color:#006000; background-color:#006000;" />
+
+## Data Preparation
+<hr style="height:2px; border:none; color:#006000; background-color:#006000;" />
+
+## Business Understanding
+<hr style="height:2px; border:none; color:#006000; background-color:#006000;" />
