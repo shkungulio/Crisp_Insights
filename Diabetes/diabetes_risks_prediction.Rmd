@@ -5,6 +5,7 @@ output:
   html_document:
     theme: readable
     highlight: espresso
+    css: "styles.css"
     toc: true
     toc_depth: 3
     toc_float:
@@ -12,22 +13,7 @@ output:
       smooth_scroll: false
 ---
 
-<style type="text/css">
-#TOC {
-  color: #0000FF; 
-  max-width: 18.75em;
-  background: red;
-}
-hr{
-	height:2px;
-	border:none;
-	color:#0000FF;
-	background-color:#0000FF;
-}
-    
-</style>
-
-```{r setup, include=FALSE}
+```{r setup, include=FALSE, fig.width=12, fig.height=6}
 knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 
 #Install the following libraries if required
@@ -112,7 +98,7 @@ library(pROC)
 <hr>
 
 ### Business Objective
-The primary business objective of this project is to support the Texas Department of State Health Services in enhancing diabetes prevention efforts across the state. By leveraging self-reported health behavior and demographic data, the goal is to develop a predictive model by 2026 that identifies Texas adults with a 30% or higher risk** of developing diabetes within the next five years. This model aims to facilitate early detection, reduce long-term healthcare costs, promote health equity, and optimize resource allocation in vulnerable communities.
+The primary business objective of this project is to support the Texas Department of State Health Services in enhancing diabetes prevention efforts across the state. By leveraging self-reported health behavior and demographic data, the goal is to develop a predictive model by 2026 that identifies Texas adults with a 30% or higher risk of developing diabetes within the next five years. This model aims to facilitate early detection, reduce long-term healthcare costs, promote health equity, and optimize resource allocation in vulnerable communities.
 
 ### Problem Statement
 How can public health agencies in Texas use self-reported behavioral and demographic data to **identify adults at 30%+ risk of developing diabetes within 5 years**, using markers like HbA1c (>5.7%) and BMI (>30), and implement targeted interventions by 2026?.
@@ -330,6 +316,7 @@ test <- diabetes.df[-train_idx, ]
 
 ### Baseline: Logistic Regression
 This is initial baseline model.
+#### Fit logistic model
 ```{r}
 model_logit <- glm(Diabetes_binary ~ ., data = train, family = binomial)
 ```
@@ -343,21 +330,23 @@ summary(model_logit)
 test_probs <- predict(model_logit, newdata = test, type = "response")
 test_pred <- ifelse(test_probs > 0.5, 1, 0)
 ```
-#### Evaluate Logistic model
+#### Evaluate logistic model
 ```{r}
 confusionMatrix(as.factor(test_pred), test$Diabetes_binary, positive = "1")
 ```
-#### ROC curve
+#### Logistic ROC curve
 ```{r}
 roc_obj <- roc(response = test$Diabetes_binary, predictor = test_probs, quiet = TRUE)
 
 plot(roc_obj,
      main = "ROC Curve - Logistic Regression",
+     col = "blue",
      lwd = 2,
      print.auc = TRUE,
      print.auc.pattern = "AUC = %.3f",
      print.auc.cex = 1.1,
      print.auc.x = 0.65, print.auc.y = 0.2)
+abline(a = 0, b = 1, lty = 2, col = "red")
 
 ```
 
@@ -377,6 +366,21 @@ rf_preds <- predict(rf_model, newdata = test)
 #### Evaluate random forest model
 ```{r}
 confusionMatrix(rf_preds, test$Diabetes_binary)
+```
+#### Random Forest ROC Curve
+```{r}
+rf_probs <- predict(rf_model, newdata = test, type = "prob")[, 2]
+rf_roc_obj <- roc(test$Diabetes_binary, rf_probs)
+
+plot(rf_roc_obj,
+  main = "ROC Curve - Random Forest",
+  col = "blue",
+  lwd = 2,
+  print.auc = TRUE,
+  print.auc.pattern = "AUC = %.3f",
+  print.auc.cex = 1.1,
+  print.auc.x = 0.65, print.auc.y = 0.2)
+abline(a = 0, b = 1, lty = 2, col = "red")
 ```
 
 <br>

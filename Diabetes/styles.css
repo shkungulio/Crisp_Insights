@@ -1,10 +1,10 @@
-#TOC{
-	max-width: 300px;
-	background-color
+#TOC {
+  color: #0000FF; 
+  max-width: 18.75em;
 }
 hr{
 	height:2px;
 	border:none;
-	color:#006000;
-	background-color:#006000;
+	color:#0000FF;
+	background-color:#0000FF;
 }

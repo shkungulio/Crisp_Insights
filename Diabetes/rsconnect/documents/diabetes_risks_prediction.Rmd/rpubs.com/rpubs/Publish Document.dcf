@@ -1,0 +1,10 @@
+name: Publish Document
+title:
+username:
+account: rpubs
+server: rpubs.com
+hostUrl: rpubs.com
+appId: https://api.rpubs.com/api/v1/document/1335860/742877a9777d4dabb6800bd5e15a211f
+bundleId: https://api.rpubs.com/api/v1/document/1335860/742877a9777d4dabb6800bd5e15a211f
+url: http://rpubs.com/shkungulio/1335860
+version: 1
