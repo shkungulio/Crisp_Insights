@@ -277,18 +277,26 @@ diabetes.df$Income <- factor(diabetes.df$Income,
                              labels = c("<10k", "10-15k", "15-20k", "20-25k",
                                         "25-35k", "35-50k", "50-75k", "75k+"))
 ```
-### Drop or convert unused variables
+### Drop unused variables
 ```{r}
 diabetes.df <- diabetes.df %>%
   select(Diabetes_binary, BMI_scaled, MentHlth_binned, PhysHlth_binned, Age_group,
          Chronic_Risk_Load, Healthcare_Barrier_Index, GenHlth, Education, Income,
          Smoker, PhysActivity, DiffWalk, HvyAlcoholConsump, Sex)
 ```
-### Analysis through Visualization
-#### Export to CSV file for further visualization
+### Export to CSV file for further visualization
 ```{r}
 #write.csv(diabetes.df, "diabetes_data.csv", row.names = FALSE)
 ```
+
+### Analysis through Visualization
+#### Age_group Boxplots
+```{r}
+ggplot(diabetes.df, aes(x = as.factor(Diabetes_binary), y = MentHlth_binned)) +
+  geom_boxplot(fill = "orange") +
+  labs(title = "Age vs Diabetes Status", x = "Diabetes", y = "Age Group")
+```
+
 
 
 ### Convert categorical variables to factor
@@ -316,6 +324,7 @@ test <- diabetes.df[-train_idx, ]
 
 ### Baseline: Logistic Regression
 This is initial baseline model.
+
 #### Fit logistic model
 ```{r}
 model_logit <- glm(Diabetes_binary ~ ., data = train, family = binomial)
@@ -347,7 +356,6 @@ plot(roc_obj,
      print.auc.cex = 1.1,
      print.auc.x = 0.65, print.auc.y = 0.2)
 abline(a = 0, b = 1, lty = 2, col = "red")
-
 ```
 
 ### Random Forest
