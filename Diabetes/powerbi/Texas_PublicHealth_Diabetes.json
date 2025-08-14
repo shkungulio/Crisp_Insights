@@ -1,0 +1,45 @@
+{
+  "name": "Texas Public Health Diabetes",
+  "dataColors": [
+    "#08306b", "#c6dbef", "#fdae6b", "#6baed6", "#fee5d9", "#99000d"
+  ],
+  "background": "#FFFFFF",
+  "foreground": "#08306b",
+  "tableAccent": "#fdae6b",
+  "visualStyles": {
+    "*": {
+      "*": {
+        "title": [
+          {
+            "color": { "solid": { "color": "#08306b" } },
+            "fontSize": 14,
+            "fontFamily": "Segoe UI"
+          }
+        ],
+        "labels": [
+          {
+            "color": { "solid": { "color": "#08306b" } },
+            "fontSize": 12,
+            "fontFamily": "Segoe UI"
+          }
+        ]
+      }
+    },
+    "card": {
+      "*": {
+        "categoryLabels": [
+          {
+            "color": { "solid": { "color": "#08306b" } },
+            "fontSize": 11
+          }
+        ],
+        "labels": [
+          {
+            "color": { "solid": { "color": "#08306b" } },
+            "fontSize": 20
+          }
+        ]
+      }
+    }
+  }
+}
