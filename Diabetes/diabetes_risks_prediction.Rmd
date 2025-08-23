@@ -86,6 +86,8 @@ library(tidyverse)
 library(caret)
 library(corrplot)
 library(randomForest)
+library(ranger)
+library(doParallel)
 #library(janitor)
 library(ggplot2)
 library(scales)
@@ -111,7 +113,7 @@ library(pROC)
 The primary business objective of this project is to support the Texas Department of State Health Services in enhancing diabetes prevention efforts across the state. By leveraging self-reported health behavior and demographic data, the goal is to develop a predictive model by 2026 that identifies Texas adults with a 30% or higher risk of developing diabetes within the next five years. This model aims to facilitate early detection, reduce long-term healthcare costs, promote health equity, and optimize resource allocation in vulnerable communities.
 
 ### Problem Statement
-How can public health agencies in Texas use self-reported behavioral and demographic data to **identify adults at 30%+ risk of developing diabetes** within 5 years, using markers like HbA1c (>5.7%) and BMI (>30), and implement targeted interventions by 2026?.
+How can public health agencies in Texas use self-reported behavioral and demographic data to identify adults at 30%+ risk of developing diabetes within 5 years, using BMI (>30) marker, and implement targeted interventions by 2026?.
 
 ### Business Success Criteria
 The project will be considered successful if it:
@@ -133,30 +135,30 @@ The primary dataset used is the **Diabetes Health Indicators Dataset** sourced f
 
 ### Load the data
 ```{r}
-diabetes <- read.csv("../resources/diabetes_health_indicators_BRFSS2015.csv")
+diabetes.df <- read.csv("../resources/diabetes_health_indicators_BRFSS2015.csv")
 ```
 ### Check for dimension and structure
 ```{r}
-dim(diabetes)
-str(diabetes)
+dim(diabetes.df)
+str(diabetes.df)
 ```
 ### Check duplicates
 Check and remove duplicates if exist
 ```{r}
-diabetes <- distinct(diabetes)
+diabetes.df <- distinct(diabetes.df)
 ```
 ### Check summary
 #### Basic summary
 ```{r}
-skim(diabetes)
+skim(diabetes.df)
 ```
 #### Statistical summary
 ```{r}
-summary(diabetes)
+summary(diabetes.df)
 ```
 ### Class balance of target
 ```{r}
-diabetes %>% 
+diabetes.df %>% 
   count(Diabetes_binary) %>% 
   mutate(pct = n/sum(n)*100)
 ```
@@ -195,14 +197,14 @@ The dataset contains 253,680 records and 22 variables relevant to diabetes risk 
 ### Pre-analysis visualization
 #### BMI Histogram
 ```{r}
-ggplot(diabetes, aes(x = BMI)) +
+ggplot(diabetes.df, aes(x = BMI)) +
   geom_histogram(bins = 50, fill = "steelblue", color = "black") +
   theme_test() + labs(title = "Distribution of BMI")
 ```
 
 #### Age Boxplots
 ```{r}
-ggplot(diabetes, aes(x = as.factor(Diabetes_binary), y = Age)) +
+ggplot(diabetes.df, aes(x = as.factor(Diabetes_binary), y = Age)) +
   geom_boxplot(fill = "orange") +
   labs(title = "Age vs Diabetes Status", x = "Diabetes", y = "Age Group") +
   theme_test()
@@ -210,7 +212,7 @@ ggplot(diabetes, aes(x = as.factor(Diabetes_binary), y = Age)) +
 
 #### Correlation among numeric variables
 ```{r}
-numeric_vars <- diabetes %>% select(BMI, MentHlth, PhysHlth, Age)
+numeric_vars <- diabetes.df %>% select(BMI, MentHlth, PhysHlth, Age)
 corrplot(cor(numeric_vars), method = "color", type = "upper")
 ```
 
@@ -231,12 +233,38 @@ Defensive cleaning for **MentHlth** and **PhysHlth** special codes/ placeholders
 In some BRFSS releases, 88 can mean zero **0** days. Hence I will convert 88 to 0 and 77 or 99 to **NA**.
 If these codes are not present in the dataset, then the mutate() calls are no-ops.
 ```{r}
-diabetes.df <- diabetes |> 
+diabetes.df <- diabetes.df |> 
   mutate(
-    MentHlth = case_when(MentHlth %in% c(88) ~ 0, MentHlth %in% c(77,99) ~ NA, TRUE ~ MentHlth),
-    PhysHlth = case_when(PhysHlth %in% c(88) ~ 0, PhysHlth %in% c(77,99) ~ NA, TRUE ~ PhysHlth)
+    MentHlth = case_when(MentHlth %in% c(88) ~ 0, 
+                         MentHlth %in% c(77,99) ~ NA, 
+                         TRUE ~ MentHlth),
+    PhysHlth = case_when(PhysHlth %in% c(88) ~ 0, 
+                         PhysHlth %in% c(77,99) ~ NA, 
+                         TRUE ~ PhysHlth)
   )
 ```
+
+### Remove NA's
+Remove rows containing NA's
+```{r}
+diabetes.df <- na.omit(diabetes.df)
+```
+
+### Remove Outliers
+Remove outliers from BMI using IQR method
+```{r}
+# Calculate IQR bounds for BMI
+Q1 <- quantile(diabetes.df$BMI, 0.25, na.rm = TRUE)
+Q3 <- quantile(diabetes.df$BMI, 0.75, na.rm = TRUE)
+IQR <- Q3 - Q1
+lower_bound <- Q1 - 1.5 * IQR
+upper_bound <- Q3 + 1.5 * IQR
+
+# Remove rows with BMI outliers
+diabetes.df <- diabetes.df %>%
+  filter(BMI >= lower_bound & BMI <= upper_bound)
+```
+
 ### Binning Mental and Physical Health
 ```{r}
 diabetes.df$MentHlth_binned <- cut(diabetes.df$MentHlth,
@@ -288,24 +316,28 @@ diabetes.df$Income <- factor(diabetes.df$Income,
                              labels = c("<10k", "10-15k", "15-20k", "20-25k",
                                         "25-35k", "35-50k", "50-75k", "75k+"))
 ```
+
 ### Drop unused variables
 ```{r}
 diabetes.df <- diabetes.df %>%
-  select(Diabetes_binary, BMI_scaled, MentHlth_binned, PhysHlth_binned, Age_group,
-         Chronic_Risk_Load, Healthcare_Barrier_Index, GenHlth, Education, Income,
-         Smoker, PhysActivity, DiffWalk, HvyAlcoholConsump, Sex)
+  select(Diabetes_binary, BMI, BMI_scaled, MentHlth_binned, PhysHlth_binned,
+         Age_group, Chronic_Risk_Load, Healthcare_Barrier_Index, GenHlth, 
+         Education, Income, Smoker, PhysActivity, DiffWalk, 
+         HvyAlcoholConsump, Sex)
 ```
-### Export to CSV file for further visualization
+
+### Export to CSV file
+Export to CSV file for further visualization
 ```{r}
-#write.csv(diabetes.df, "diabetes_data.csv", row.names = FALSE)
+write.csv(diabetes.df, "diabetes_data.csv", row.names = FALSE)
 ```
 
 ### EDA through Visualization
 
 #### Define high-risk group (≥30% probability equivalent proxy)
 ```{r}
-mean_bmi <- mean(diabetes$BMI, na.rm = TRUE)  # mean before scaling
-sd_bmi <- sd(diabetes$BMI, na.rm = TRUE)      # std before scaling
+mean_bmi <- mean(diabetes.df$BMI, na.rm = TRUE)  # mean before scaling
+sd_bmi <- sd(diabetes.df$BMI, na.rm = TRUE)      # std before scaling
 diabetes.df$approx_BMI <- (diabetes.df$BMI_scaled * sd_bmi) + mean_bmi
 
 # Define high-risk flag
@@ -389,10 +421,6 @@ ggplot(diabetes.df, aes(x = GenHlth, fill = factor(HighRisk))) +
   theme_test()
 ```
 
-```{r include=FALSE}
-#knitr::knit_exit()
-```
-
 ### Convert categorical variables to factor
 ```{r}
 diabetes.df <- diabetes.df %>%
@@ -406,7 +434,8 @@ diabetes.df <- diabetes.df %>%
 
 ```{r}
 set.seed(123)
-train_idx <- createDataPartition(diabetes.df$Diabetes_binary, p = 0.8, list = FALSE)
+train_idx <- createDataPartition(diabetes.df$Diabetes_binary, 
+                                 p = 0.8, list = FALSE)
 train <- diabetes.df[train_idx, ]
 test <- diabetes.df[-train_idx, ]
 ```
@@ -416,125 +445,9 @@ test <- diabetes.df[-train_idx, ]
 ## Modeling
 <hr/>
 
-```{r}
-# Ensure target is a 2-level factor with valid names and the positive class FIRST
-train$Diabetes_binary <- factor(
-  ifelse(train$Diabetes_binary == 1, "Positive", "Negative"),
-  levels = c("Positive", "Negative")
-)
-test$Diabetes_binary <- factor(
-  ifelse(test$Diabetes_binary == 1, "Positive", "Negative"),
-  levels = c("Positive", "Negative")
-)
-
-# Predictors = all columns except target
-xvars <- setdiff(names(train), "Diabetes_binary")
-
-# 5-fold CV config with ROC as the primary metric
-ctrl <- caret::trainControl(
-  method = "cv",
-  number = 5,
-  classProbs = TRUE,
-  summaryFunction = caret::twoClassSummary,
-  savePredictions = "final",
-  verboseIter = FALSE
-)
-
-```
-
-### Logistic Regression with 5-fold CV
-```{r}
-set.seed(123)
-glm_cv <- caret::train(
-  x = train[, xvars],
-  y = train$Diabetes_binary,
-  method = "glm",
-  family = binomial(),
-  metric = "ROC",
-  trControl = ctrl
-)
-
-glm_cv    # CV results (mean ROC/SE/CI across folds)
-
-# Logistic — test-set probabilities & metrics
-glm_prob_test <- predict(glm_cv, newdata = test, type = "prob")[, "Positive"]
-glm_pred_test <- ifelse(glm_prob_test >= 0.5, "Positive", "Negative")
-caret::confusionMatrix(
-  data = factor(glm_pred_test, levels = c("Positive","Negative")),
-  reference = test$Diabetes_binary,
-  positive = "Positive"
-)
-
-# ROC & AUC on test
-roc_glm <- pROC::roc(response = test$Diabetes_binary, predictor = glm_prob_test, quiet = TRUE)
-plot(roc_glm, main = "ROC Curve — Logistic Regression (Test)")
-pROC::auc(roc_glm)
-
-```
-
-### Random Forest with 5-fold CV
-```{r}
-# Simple tuning grid for mtry; you can widen/narrow this as needed
-rf_grid <- expand.grid(mtry = c(3, 5, 7, 9, 12, 15))
-
-set.seed(123)
-rf_cv <- caret::train(
-  x = train[, xvars],
-  y = train$Diabetes_binary,
-  method = "rf",            # uses randomForest package
-  metric = "ROC",
-  trControl = ctrl,
-  tuneGrid = rf_grid,
-  ntree = 500,              # number of trees
-  importance = TRUE
-)
-
-rf_cv         # CV results & best mtry
-rf_cv$bestTune
-rf_cv$finalModel$confusion  # OOB confusion (training-only diagnostic)
-
-# Random Forest — test-set probabilities & metrics
-rf_prob_test <- predict(rf_cv, newdata = test, type = "prob")[, "Positive"]
-rf_pred_test <- ifelse(rf_prob_test >= 0.5, "Positive", "Negative")
-caret::confusionMatrix(
-  data = factor(rf_pred_test, levels = c("Positive","Negative")),
-  reference = test$Diabetes_binary,
-  positive = "Positive"
-)
-
-# ROC & AUC on test
-roc_rf <- pROC::roc(response = test$Diabetes_binary, predictor = rf_prob_test, quiet = TRUE)
-plot(roc_rf, main = "ROC Curve — Random Forest (Test)")
-pROC::auc(roc_rf)
-
-# Optional: variable importance
-vip::vip(rf_cv$finalModel, num_features = 15)
-
-```
-
-### Model Comparison
-```{r}
-# CV comparison (ROC across folds)
-cv_comp <- caret::resamples(list(Logistic = glm_cv, RandomForest = rf_cv))
-summary(cv_comp)
-bwplot(cv_comp, metric = "ROC")   # boxplot of CV ROC
-
-# Test AUC side-by-side
-data.frame(
-  Model = c("Logistic", "Random Forest"),
-  Test_AUC = c(pROC::auc(roc_glm), pROC::auc(roc_rf))
-)
-
-```
-
-```{r include=FALSE}
-knitr::knit_exit()
-```
-
-<br>
-
-### Baseline: Logistic Regression
+### Logistic Regression
 This is initial baseline model.
+
 #### Fit logistic model
 ```{r}
 model_logit <- glm(Diabetes_binary ~ ., data = train, family = binomial)
@@ -569,12 +482,142 @@ abline(a = 0, b = 1, lty = 2, col = "red")
 
 ```
 
+```{r include=FALSE}
+#knitr::knit_exit()
+```
+
+### Random Forest
+Random Forest was selected as alternative model to implement with tuning focus.
+
+```{r}
+# Ensure target is a clean 2-level factor (positive = "Yes")
+train$Diabetes_binary <- factor(ifelse(train$Diabetes_binary == 1, "Yes", "No"),
+                                levels = c("No","Yes"))
+test$Diabetes_binary  <- factor(ifelse(test$Diabetes_binary  == 1, "Yes", "No"),
+                                levels = c("No","Yes"))
+
+# Remove near-zero-variance predictors (speeds split finding)
+nzv <- nearZeroVar(train[, setdiff(names(train), "Diabetes_binary")], names = TRUE)
+keep <- setdiff(names(train), nzv)
+train2 <- train[, c("Diabetes_binary", setdiff(keep, "Diabetes_binary"))]
+test2  <- test[,  c("Diabetes_binary", setdiff(keep, "Diabetes_binary"))]
+
+# 5-fold CV setup (ROC)
+cv5 <- trainControl(
+  method = "cv",
+  number = 5,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary,
+  savePredictions = "final",
+  allowParallel = TRUE
+)
+
+# Parallelize CV
+n_cores <- max(1, parallel::detectCores() - 1)
+cl <- makePSOCKcluster(n_cores)
+registerDoParallel(cl)
+
+# Small, informed grid around sqrt(p)
+p <- ncol(train2) - 1
+grid <- expand.grid(
+  mtry = unique(pmax(1L, round(c(sqrt(p), p/5, p/3)))),
+  splitrule = "gini",
+  min.node.size = c(2L, 5L, 10L)
+)
+
+set.seed(123)
+rf_cv <- train(
+  Diabetes_binary ~ .,
+  data = train2,
+  method = "ranger",          # << fast
+  metric = "ROC",
+  trControl = cv5,
+  tuneGrid = grid,            # << small, sensible grid
+  num.trees = 300,            # << fewer trees than 500; usually enough
+  importance = "impurity",
+  probability = TRUE,
+  oob.error = TRUE
+)
+
+stopCluster(cl)
+registerDoSEQ()
+
+print(rf_cv)
+plot(rf_cv)
+
+# ---- Evaluate on held-out test ----
+rf_probs <- predict(rf_cv, newdata = test2, type = "prob")[, "Yes"]
+rf_preds <- factor(ifelse(rf_probs >= 0.5, "Yes", "No"), levels = c("No","Yes"))
+
+confusionMatrix(rf_preds, test2$Diabetes_binary, positive = "Yes")
+
+rf_roc_obj <- roc(response = test2$Diabetes_binary, predictor = rf_probs, quiet = TRUE)
+plot(rf_roc_obj,
+     main = "ROC Curve - Ranger RF (5-fold CV)",
+     col = "blue", lwd = 2,
+     print.auc = TRUE,
+     print.auc.pattern = "AUC = %.3f",
+     print.auc.cex = 1.1,
+     print.auc.x = 0.65, print.auc.y = 0.2)
+abline(a = 0, b = 1, lty = 2, col = "red")
+```
+
+
+```{r include=FALSE}
+knitr::knit_exit()
+```
+
+
+#### Model Camparison
+```{r}
+# Logistic Regression Metrics
+logit_cm <- confusionMatrix(as.factor(test_pred), test$Diabetes_binary, positive = "1")
+logit_auc <- auc(roc_obj)
+
+logit_metrics <- data.frame(
+  Model = "Logistic Regression",
+  Accuracy = logit_cm$overall["Accuracy"],
+  Precision = logit_cm$byClass["Precision"],
+  Recall = logit_cm$byClass["Recall"],
+  F1 = logit_cm$byClass["F1"],
+  AUC = as.numeric(logit_auc)
+)
+
+# Random Forest Metrics
+rf_cm <- confusionMatrix(rf_preds, test$Diabetes_binary, positive = "1")
+rf_auc <- auc(rf_roc_obj)
+
+rf_metrics <- data.frame(
+  Model = "Random Forest",
+  Accuracy = rf_cm$overall["Accuracy"],
+  Precision = rf_cm$byClass["Precision"],
+  Recall = rf_cm$byClass["Recall"],
+  F1 = rf_cm$byClass["F1"],
+  AUC = as.numeric(rf_auc)
+)
+
+# Combine and Display
+comparison_table <- bind_rows(logit_metrics, rf_metrics)
+
+kable(comparison_table, caption = "Model Comparison: Logistic Regression vs Random Forest", digits = 3)
+```
+
+```{r include=FALSE}
+knitr::knit_exit()
+```
+
+
+
+
+
+
 ### Random Forest
 Random Forest was selected as alternative model to implement with tuning focus.
 
 #### Train Random Forest Model
 ```{r}
-rf_model <- randomForest(Diabetes_binary ~ ., data = train, ntree = 100)
+rf_model <- randomForest(Diabetes_binary ~ ., 
+                         data = train, ntree = 500)
 ```
 
 #### Make predictions on random forest model
@@ -602,6 +645,48 @@ plot(rf_roc_obj,
 abline(a = 0, b = 1, lty = 2, col = "red")
 ```
 
+#### Model Camparison
+```{r}
+# Logistic Regression Metrics
+logit_cm <- confusionMatrix(as.factor(test_pred), test$Diabetes_binary, positive = "1")
+logit_auc <- auc(roc_obj)
+
+logit_metrics <- data.frame(
+  Model = "Logistic Regression",
+  Accuracy = logit_cm$overall["Accuracy"],
+  Precision = logit_cm$byClass["Precision"],
+  Recall = logit_cm$byClass["Recall"],
+  F1 = logit_cm$byClass["F1"],
+  AUC = as.numeric(logit_auc)
+)
+
+# Random Forest Metrics
+rf_cm <- confusionMatrix(rf_preds, test$Diabetes_binary, positive = "1")
+rf_auc <- auc(rf_roc_obj)
+
+rf_metrics <- data.frame(
+  Model = "Random Forest",
+  Accuracy = rf_cm$overall["Accuracy"],
+  Precision = rf_cm$byClass["Precision"],
+  Recall = rf_cm$byClass["Recall"],
+  F1 = rf_cm$byClass["F1"],
+  AUC = as.numeric(rf_auc)
+)
+
+# Combine and Display
+comparison_table <- bind_rows(logit_metrics, rf_metrics)
+
+kable(comparison_table, caption = "Model Comparison: Logistic Regression vs Random Forest", digits = 3)
+```
+
+
+```{r include=FALSE}
+knitr::knit_exit()
+```
+
+
+
+
 <br>
 
 ## Evaluation & Reporting
@@ -624,3 +709,63 @@ abline(a = 0, b = 1, lty = 2, col = "red")
 <hr/>
 
 
+
+### Random Forest
+Random Forest was selected as alternative model to implement with tuning focus.
+
+```{r}
+set.seed(123)
+
+# Ensure target is a 2-level factor with valid names avoiding "0" or "1"
+# Treat "1" as the positive class ("Yes")
+train$Diabetes_binary <- factor(ifelse(train$Diabetes_binary == 1, "Yes", "No"),
+                                levels = c("No","Yes"))
+test$Diabetes_binary  <- factor(ifelse(test$Diabetes_binary  == 1, "Yes", "No"),
+                                levels = c("No","Yes"))
+
+# 5-fold CV setup
+cv5 <- trainControl(
+  method = "cv",
+  number = 5,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary,  # enables ROC, Sens, Spec
+  savePredictions = "final"
+)
+
+# Train Random Forest with CV (optimize by ROC)
+rf_cv <- train(
+  Diabetes_binary ~ .,
+  data = train,
+  method = "rf",
+  metric = "ROC",
+  trControl = cv5,
+  tuneLength = 7,
+  ntree = 300,
+  importance = TRUE
+)
+
+rf_cv
+plot(rf_cv)
+
+# Evaluate on the held-out test set
+rf_probs <- predict(rf_cv, newdata = test, type = "prob")[, "Yes"]
+rf_preds <- factor(ifelse(rf_probs >= 0.5, "Yes", "No"), 
+                   levels = c("No","Yes"))
+
+confusionMatrix(rf_preds, test$Diabetes_binary, positive = "Yes")
+
+# ROC Curve on test
+rf_roc_obj <- roc(response = test$Diabetes_binary, 
+                  predictor = rf_probs, quiet = TRUE)
+
+plot(rf_roc_obj,
+     main = "ROC Curve - Random Forest (5-fold CV model)",
+     col = "blue",
+     lwd = 2,
+     print.auc = TRUE,
+     print.auc.pattern = "AUC = %.3f",
+     print.auc.cex = 1.1,
+     print.auc.x = 0.65, print.auc.y = 0.2)
+abline(a = 0, b = 1, lty = 2, col = "red")
+
+```
